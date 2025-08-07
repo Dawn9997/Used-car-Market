@@ -1,10 +1,10 @@
 // src/SubmitCar.js
-// Programming Lab 2: React form handling, state management, and localStorage integration
+// Programming Lab 2: Submit car listing using backend API instead of localStorage
 
 import React, { useState } from 'react';
 
 const SubmitCar = () => {
-  // Lab 2: Form state for car submission
+  // Car submission form state
   const [carData, setCarData] = useState({
     make: '',
     model: '',
@@ -17,10 +17,10 @@ const SubmitCar = () => {
     imageUrl: '',
     location: '',
     description: '',
-    contactInfo: '', // Seller contact field
+    contactInfo: '',
   });
 
-  // Lab 2: Handle form input changes
+  // Handle input change for all form fields
   const handleChange = (e) => {
     setCarData({
       ...carData,
@@ -28,28 +28,59 @@ const SubmitCar = () => {
     });
   };
 
-  // Lab 2: Handle form submission
-  const handleSubmit = (e) => {
+  // Submit form data to backend
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const currentUser = localStorage.getItem('currentUser'); // ❗ FIXED: read as string
+    // Get current user from localStorage
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
     if (!currentUser) {
       alert('Please log in first.');
       return;
     }
 
-    // Append submittedBy and approved flag
+    // Construct submission with user info
     const newSubmission = {
       ...carData,
-      submittedBy: currentUser, // ✅ Now shows correctly in AdminPanel
+      submitted_by: currentUser.name,
       approved: false,
     };
 
-    const storedCars = JSON.parse(localStorage.getItem('submittedCars')) || [];
-    storedCars.push(newSubmission);
-    localStorage.setItem('submittedCars', JSON.stringify(storedCars));
+    try {
+      const response = await fetch('http://127.0.0.1:5000/cars', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newSubmission),
+      });
 
-    alert('Car submitted for review!');
+      const result = await response.json();
+
+      if (response.ok) {
+        alert('Car submitted for review!');
+        // Reset form after submission
+        setCarData({
+          make: '',
+          model: '',
+          year: '',
+          price: '',
+          mileage: '',
+          transmission: '',
+          fuelType: '',
+          vin: '',
+          imageUrl: '',
+          location: '',
+          description: '',
+          contactInfo: '',
+        });
+      } else {
+        alert(`Submission failed: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      alert('Server connection failed.');
+    }
   };
 
   return (
@@ -212,7 +243,6 @@ const SubmitCar = () => {
             name="contactInfo"
             value={carData.contactInfo}
             onChange={handleChange}
-            placeholder="Phone, email, etc."
             required
           />
         </div>
@@ -240,6 +270,7 @@ const SubmitCar = () => {
 };
 
 export default SubmitCar;
+
 
 
 

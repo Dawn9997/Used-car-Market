@@ -1,10 +1,14 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS  
+
+
 
 # ------------------------------
 # Flask App Initialization
 # ------------------------------
 app = Flask(__name__)
+CORS(app)                    
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:zhanghan998@localhost:5433/postgres'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -62,6 +66,7 @@ class User(db.Model):
         return {
             "id": self.id,
             "username": self.username
+        
         }
 
 # ------------------------------
@@ -204,6 +209,30 @@ def delete_user(user_id):
     db.session.commit()
     return jsonify({"status": "success", "message": f"User with id {user_id} deleted"}), 200
 
+@app.route('/api/register', methods=['POST'])
+def api_register():
+    data = request.get_json()
+    username = data.get("username")
+    email = data.get("email")  # Optional in current model
+    password = data.get("password")
+
+    if not username or not password:
+        return jsonify({"status": "error", "message": "Username and password are required"}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({"status": "error", "message": "Username already exists"}), 409
+
+    user = User(username=username, password=password)
+    db.session.add(user)
+    db.session.commit()
+
+    return jsonify({
+        "status": "success",
+        "message": "User registered successfully.",
+        "data": user.to_dict()
+    }), 201
+
+
 
 
 # ✅ Add login endpoint (with admin check)
@@ -216,20 +245,21 @@ def login():
     if not username or not password:
         return jsonify({"status": "error", "message": "Username and password required"}), 400
 
-    user = User.query.filter_by(username=username, password=password).first()
-    if not user:
+    user = User.query.filter_by(username=username).first()
+    if not user or user.password != password:
         return jsonify({"status": "error", "message": "Invalid credentials"}), 401
 
-    is_admin = (username == "admin")  # Hardcoded admin check
+    is_admin = (username == "admin")
 
     return jsonify({
         "status": "success",
-        "data": {
-            "userId": user.id,
+        "user": {
+            "id": user.id,
             "username": user.username,
             "isAdmin": is_admin
         }
     }), 200
+
 
 # ✅ Admin approves a car listing
 @app.route('/cars/<int:car_id>/approve', methods=['PUT'])
@@ -275,6 +305,20 @@ def get_car_detail(car_id):
         "status": "success",
         "data": car.to_dict()
     }), 200
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    users = User.query.all()
+    cars = Car.query.all()
+
+    return jsonify({
+        "total_users": len(users),
+        "admin_users": len([u for u in users if u.username == "admin"]),
+        "total_cars": len(cars),
+        "approved_cars": len([c for c in cars if c.approved]),
+        "pending_cars": len([c for c in cars if not c.approved])
+    }), 200
+
 
 
 # ------------------------------

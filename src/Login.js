@@ -4,6 +4,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+const API_BASE = 'http://127.0.0.1:5000'; // Backend API base URL
+
 const Login = () => {
   const [username, setUsername] = useState('');
   const [role, setRole] = useState('User');
@@ -11,40 +13,59 @@ const Login = () => {
   const navigate = useNavigate();
 
   // Handle login form submission
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
 
-    // === Hardcoded admin check ===
-    if (username === 'admin') {
-      if (password !== 'admin123') {
-        alert('Incorrect password for admin!');
-        return;
+    // Simple client-side demo check for admin password
+    if (username === 'admin' && password !== 'admin123') {
+      alert('Incorrect password for admin!');
+      return;
+    }
+
+    try {
+      // Send login request to backend
+      const response = await fetch(`${API_BASE}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, role, password }),
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        const currentUser = result.user;
+
+        // Save user info in localStorage
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        localStorage.setItem('user_id', currentUser.id);
+        localStorage.setItem('username', currentUser.username);
+
+        // Optional: store in localStorage registeredUsers
+        const users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
+        const exists = users.some(user => user.name === username);
+        if (!exists) {
+          const newUser = {
+            ...currentUser,
+            id: Date.now().toString() + '-' + Math.random().toString(36).substring(2, 6),
+          };
+          users.push(newUser);
+          localStorage.setItem('registeredUsers', JSON.stringify(users));
+        }
+
+        // Redirect based on role
+        if (role === 'Admin') {
+          navigate('/admin');
+        } else {
+          navigate('/submit');
+        }
+
+      } else {
+        alert('Login failed: ' + result.message);
       }
-    }
 
-    // Create current user object
-    const currentUser = { name: username, role };
-    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-
-    // === Lab 2: Save user into registeredUsers if not exists ===
-    const users = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-    const exists = users.some(user => user.name === username);
-
-    if (!exists) {
-      // Add ID when saving new user (required for ManageUsers.js)
-      const newUser = {
-        ...currentUser,
-        id: Date.now().toString() + '-' + Math.random().toString(36).substring(2, 6),
-      };
-      users.push(newUser);
-      localStorage.setItem('registeredUsers', JSON.stringify(users));
-    }
-
-    // === Redirect based on role ===
-    if (role === 'Admin') {
-      navigate('/admin');
-    } else {
-      navigate('/submit');
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('Unable to connect to server.');
     }
   };
 
@@ -66,22 +87,20 @@ const Login = () => {
           />
         </div>
 
-        {/* Password for admin only */}
-        {username === 'admin' && (
-          <div className="form-group">
-            <label htmlFor="password">Password:</label>
-            <input
-              className="form-input"
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-        )}
+        {/* Password input - now visible for all users */}
+        <div className="form-group">
+          <label htmlFor="password">Password:</label>
+          <input
+            className="form-input"
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
 
-        {/* Select user role */}
+        {/* Role selection */}
         <div className="form-group">
           <label htmlFor="role">Role:</label>
           <select
@@ -102,6 +121,9 @@ const Login = () => {
 };
 
 export default Login;
+
+
+
 
 
 

@@ -1,18 +1,19 @@
 // src/Register.js
-// Programming Lab 2: User registration form using React state and event handling
-
+// Programming Lab 2: User registration form using backend API
 
 import React, { useState } from 'react';
 
+const API_BASE = 'http://127.0.0.1:5000/api'; // Flask backend base URL
+
 const Register = () => {
-  // Define form data state for username, email, and password
+  // Manage form state for username, email, and password
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     password: '',
   });
 
-  // Handle input changes and update formData state
+  // Handle input changes and update state
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -21,42 +22,50 @@ const Register = () => {
   };
 
   // Handle form submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault(); // Prevent page reload
 
-    const { username } = formData;
+    try {
+      // Send POST request to backend /api/register
+      const response = await fetch(`${API_BASE}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
 
-    // Load existing users from localStorage
-    const existingUsers = JSON.parse(localStorage.getItem('registeredUsers')) || [];
+      const result = await response.json();
 
-    // Prevent duplicate usernames
-    if (existingUsers.some((user) => user.name === username)) {
-      alert('Username already exists. Please choose another one.');
-      return;
+      if (result.status === 'success') {
+        // Store current user in localStorage
+        const currentUser = {
+          name: formData.username,
+          role: 'User',
+        };
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+
+        // Save to registeredUsers (optional, for local display)
+        const existingUsers = JSON.parse(localStorage.getItem('registeredUsers')) || [];
+        const updatedUsers = [...existingUsers, currentUser];
+        localStorage.setItem('registeredUsers', JSON.stringify(updatedUsers));
+
+        // Show confirmation
+        alert('Registration successful!');
+
+        // Reset form
+        setFormData({
+          username: '',
+          email: '',
+          password: '',
+        });
+
+      } else {
+        alert(`Registration failed: ${result.message}`);
+      }
+
+    } catch (error) {
+      console.error('Registration error:', error);
+      alert('Failed to connect to the server.');
     }
-
-    // Create new user object with default role
-    const newUser = {
-      name: username,
-      role: 'User',
-    };
-
-    // Save new user into the array
-    const updatedUsers = [...existingUsers, newUser];
-    localStorage.setItem('registeredUsers', JSON.stringify(updatedUsers));
-
-    // Optionally set this as current user
-    localStorage.setItem('currentUser', JSON.stringify(newUser));
-
-    // Show confirmation message
-    alert('Registration successful!');
-
-    // Clear the form
-    setFormData({
-      username: '',
-      email: '',
-      password: '',
-    });
   };
 
   return (
@@ -115,6 +124,7 @@ const Register = () => {
 };
 
 export default Register;
+
 
 
 
