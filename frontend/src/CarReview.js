@@ -1,54 +1,67 @@
 // Programming Lab 2: Admin car submission review interface using backend API
 // src/CarReview.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './style.css';
 
 const API_BASE = 'http://127.0.0.1:5000'; // Flask backend root URL
 
 const CarReview = () => {
-  const [cars, setCars] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [approved, setApproved] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Fetch all submitted cars from backend when component mounts
-  useEffect(() => {
-    fetch(`${API_BASE}/cars`)
-      .then((res) => res.json())
-      .then((data) => setCars(data.data))  // ✅ Extract car list from backend response
-      .catch((err) => console.error('Error loading cars:', err));
+  const fetchLists = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [pRes, aRes] = await Promise.all([
+        fetch(`${API_BASE}/cars/pending`),
+        fetch(`${API_BASE}/cars/approved`)
+      ]);
+
+      const pJson = await pRes.json().catch(() => ({}));
+      const aJson = await aRes.json().catch(() => ({}));
+
+      setPending(Array.isArray(pJson?.data) ? pJson.data : []);
+      setApproved(Array.isArray(aJson?.data) ? aJson.data : []);
+    } catch (err) {
+      console.error('Error loading lists:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Approve a car by sending PUT request to backend
+  useEffect(() => {
+    fetchLists();
+  }, [fetchLists]);
+
+  // Approve a car via dedicated endpoint
   const handleApprove = async (carId) => {
     try {
-      const response = await fetch(`${API_BASE}/cars/${carId}`, {
+      const res = await fetch(`${API_BASE}/cars/${carId}/approve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved: true }),
       });
-
-      if (response.ok) {
-        // Update local state to reflect approval
-        setCars((prev) =>
-          prev.map((car) =>
-            car.id === carId ? { ...car, approved: true } : car
-          )
-        );
+      if (res.ok) {
+        await fetchLists(); // refresh both lists
+      } else {
+        const msg = await res.json().catch(() => ({}));
+        alert(`Approve failed: ${msg?.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error approving car:', error);
     }
   };
 
-  // Reject a car by sending DELETE request to backend
+  // Reject (delete) a car
   const handleReject = async (carId) => {
     try {
-      const response = await fetch(`${API_BASE}/cars/${carId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        // Remove the rejected car from local state
-        setCars((prev) => prev.filter((car) => car.id !== carId));
+      const res = await fetch(`${API_BASE}/cars/${carId}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchLists();
+      } else {
+        const msg = await res.json().catch(() => ({}));
+        alert(`Delete failed: ${msg?.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error rejecting car:', error);
@@ -59,70 +72,66 @@ const CarReview = () => {
     <div className="container">
       <h1 className="dashboard-title">Admin Panel: Review Car Submissions</h1>
 
-      {/* Pending submissions section */}
       <h2>🕓 Pending Submissions</h2>
-      {cars.filter((car) => !car.approved).length === 0 ? (
+      {loading ? (
+        <p>Loading…</p>
+      ) : pending.length === 0 ? (
         <p>No pending submissions.</p>
       ) : (
         <ul className="dashboard-links">
-          {cars
-            .filter((car) => !car.approved)
-            .map((car) => (
-              <li key={car.id}>
-                <strong>
-                  {car.make} {car.model} ({car.year})
-                </strong>
-                <br />
-                Price: ${car.price}
-                <br />
-                Submitted by: {car.submittedBy || 'Unknown'}
-                <div style={{ marginTop: '8px' }}>
-                  <button
-                    className="primary-button"
-                    style={{ marginRight: '10px' }}
-                    onClick={() => handleApprove(car.id)}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    className="todo-delete-button"
-                    onClick={() => handleReject(car.id)}
-                  >
-                    Reject
-                  </button>
-                </div>
-              </li>
-            ))}
+          {pending.map((car) => (
+            <li key={car.id}>
+              <strong>
+                {car.make} {car.model} ({car.year})
+              </strong>
+              <br />
+              Price: ${car.price}
+              <br />
+              Submitted by: {car.submittedBy || 'Unknown'}
+              <div style={{ marginTop: '8px' }}>
+                <button
+                  className="primary-button"
+                  style={{ marginRight: '10px' }}
+                  onClick={() => handleApprove(car.id)}
+                >
+                  Approve
+                </button>
+                <button
+                  className="todo-delete-button"
+                  onClick={() => handleReject(car.id)}
+                >
+                  Reject
+                </button>
+              </div>
+            </li>
+          ))}
         </ul>
       )}
 
-      {/* Approved listings section */}
       <h2 style={{ marginTop: '40px' }}>✅ Approved Listings</h2>
-      {cars.filter((car) => car.approved).length === 0 ? (
+      {approved.length === 0 ? (
         <p>No approved listings yet.</p>
       ) : (
         <ul className="dashboard-links">
-          {cars
-            .filter((car) => car.approved)
-            .map((car) => (
-              <li key={car.id}>
-                <strong>
-                  {car.make} {car.model} ({car.year})
-                </strong>
-                <br />
-                Price: ${car.price}
-                <br />
-                Submitted by: {car.submittedBy || 'Unknown'}
-                <div style={{ marginTop: '8px' }}>
-                  <button
-                    className="todo-delete-button"
-                    onClick={() => handleReject(car.id)}
-                  >
-                    Delete Listing
-                  </button>
-                </div>
-              </li>
-            ))}
+          {approved.map((car) => (
+            <li key={car.id}>
+              <strong>
+                {car.make} {car.model} ({car.year})
+              </strong>
+              <br />
+              Price: ${car.price}
+              <br />
+              Submitted by: {car.submittedBy || 'Unknown'}
+              <div style={{ marginTop: '8px' }}>
+                <button
+                  className="todo-delete-button"
+                  onClick={() => handleReject(car.id)}
+                >
+                  Delete Listing
+                </button>
+              </div>
+            </li>
+          ))}
         </ul>
       )}
     </div>
@@ -130,6 +139,7 @@ const CarReview = () => {
 };
 
 export default CarReview;
+
 
 
 

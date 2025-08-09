@@ -13,58 +13,61 @@ const Register = () => {
     password: '',
   });
 
+  const [submitting, setSubmitting] = useState(false);
+
   // Handle input changes and update state
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault(); // Prevent page reload
+    if (submitting) return;
 
+    setSubmitting(true);
     try {
       // Send POST request to backend /api/register
-      const response = await fetch(`${API_BASE}/register`, {
+      const res = await fetch(`${API_BASE}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
 
-      const result = await response.json();
+      const result = await res.json().catch(() => ({}));
 
-      if (result.status === 'success') {
-        // Store current user in localStorage
-        const currentUser = {
-          name: formData.username,
-          role: 'User',
-        };
-        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+      if (res.ok && result?.status === 'success' && result?.data) {
+        const user = result.data; // { id, username, email }
 
-        // Save to registeredUsers (optional, for local display)
-        const existingUsers = JSON.parse(localStorage.getItem('registeredUsers')) || [];
-        const updatedUsers = [...existingUsers, currentUser];
-        localStorage.setItem('registeredUsers', JSON.stringify(updatedUsers));
+        // Store current user in localStorage (standardized shape)
+        // Note: simple demo — mark admin if username === 'admin'
+        localStorage.setItem(
+          'currentUser',
+          JSON.stringify({
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            isAdmin: user.username === 'admin',
+          })
+        );
 
-        // Show confirmation
         alert('Registration successful!');
-
         // Reset form
-        setFormData({
-          username: '',
-          email: '',
-          password: '',
-        });
-
+        setFormData({ username: '', email: '', password: '' });
       } else {
-        alert(`Registration failed: ${result.message}`);
+        const msg =
+          result?.message ||
+          (res.status === 409
+            ? 'Username or email already exists'
+            : 'Registration failed');
+        alert(msg);
       }
-
     } catch (error) {
       console.error('Registration error:', error);
       alert('Failed to connect to the server.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -115,8 +118,8 @@ const Register = () => {
         </div>
 
         {/* Submit Button */}
-        <button className="primary-button" type="submit">
-          Register
+        <button className="primary-button" type="submit" disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Register'}
         </button>
       </form>
     </div>
@@ -124,6 +127,7 @@ const Register = () => {
 };
 
 export default Register;
+
 
 
 

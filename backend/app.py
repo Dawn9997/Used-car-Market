@@ -1,22 +1,25 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS  
+from flask_cors import CORS
 
-
-
-# ------------------------------
+# --------------------------------------------------------
 # Flask App Initialization
-# ------------------------------
+# --------------------------------------------------------
 app = Flask(__name__)
-CORS(app)                    
+# Dev: allow all origins. For production, restrict origins explicitly.
+CORS(app)
+
+# PostgreSQL connection (adjust if needed)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:zhanghan998@localhost:5433/postgres'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 
-# ------------------------------
-# Car Model (Matches front-end fields)
-# ------------------------------
+# --------------------------------------------------------
+# Database Models
+# --------------------------------------------------------
 class Car(db.Model):
+    """Car listings submitted by users (pending -> approved workflow)."""
     __tablename__ = 'cars'
     id = db.Column(db.Integer, primary_key=True)
     make = db.Column(db.String(50), nullable=False)
@@ -31,10 +34,11 @@ class Car(db.Model):
     location = db.Column(db.String(100))
     description = db.Column(db.Text)
     contact_info = db.Column(db.String(100))
-    submitted_by = db.Column(db.String(50))
+    submitted_by = db.Column(db.String(50))  # username string (simple approach)
     approved = db.Column(db.Boolean, default=False)
 
     def to_dict(self):
+        """Return a frontend-friendly dict (camelCase for certain fields)."""
         return {
             "id": self.id,
             "make": self.make,
@@ -53,48 +57,60 @@ class Car(db.Model):
             "approved": self.approved
         }
 
-# ------------------------------
-# User Model
-# ------------------------------
 class User(db.Model):
+    """Simple user table (demo: plaintext password for now)."""
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True)   # <-- email used at registration
     password = db.Column(db.String(100), nullable=False)
 
     def to_dict(self):
         return {
             "id": self.id,
-            "username": self.username
-        
+            "username": self.username,
+            "email": self.email
         }
 
-# ------------------------------
-# Home Route (API status check)
-# ------------------------------
+# --------------------------------------------------------
+# Health Check
+# --------------------------------------------------------
 @app.route('/')
 def home():
     return "🚗 Used Car Marketplace API is running with PostgreSQL!"
 
-# ------------------------------
-# Car Routes (CRUD)
-# ------------------------------
-
+# --------------------------------------------------------
+# Car Routes (CRUD + approval workflow)
+# --------------------------------------------------------
 @app.route('/cars', methods=['GET'])
 def get_all_cars():
+    """Return all cars (both pending and approved)."""
     cars = Car.query.all()
-    return jsonify({"status": "success", "data": [car.to_dict() for car in cars]}), 200
-
-@app.route('/cars/<int:car_id>', methods=['GET'])
-def get_car_by_id(car_id):
-    car = Car.query.get(car_id)
-    if car:
-        return jsonify({"status": "success", "data": car.to_dict()}), 200
-    return jsonify({"status": "error", "message": "Car not found"}), 404
+    return jsonify({"status": "success", "data": [c.to_dict() for c in cars]}), 200
 
 @app.route('/cars', methods=['POST'])
 def create_car():
-    data = request.get_json()
+    """
+    Create a car listing.
+    Prefer userId -> resolve to username; fallback to submittedBy; else 'Anonymous'.
+    """
+    data = request.get_json() or {}
+
+    # Resolve username from userId if provided (preferred)
+    username = None
+    user_id = data.get('userId')
+    if user_id:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"status": "error", "message": "Invalid userId"}), 400
+        username = user.username
+    else:
+        # Fallback: direct submittedBy string from the request body
+        username = data.get('submittedBy')
+
+    if not username:
+        username = 'Anonymous'
+
     try:
         car = Car(
             make=data.get('make', ''),
@@ -109,7 +125,7 @@ def create_car():
             location=data.get('location', ''),
             description=data.get('description', ''),
             contact_info=data.get('contactInfo', ''),
-            submitted_by=data.get('submittedBy', 'Anonymous'),
+            submitted_by=username,
             approved=data.get('approved', False)
         )
         db.session.add(car)
@@ -121,12 +137,14 @@ def create_car():
 
 @app.route('/cars/<int:car_id>', methods=['PUT'])
 def update_car(car_id):
+    """Update fields of a car listing by ID (admin or owner in real apps)."""
     car = Car.query.get(car_id)
     if not car:
         return jsonify({"status": "error", "message": "Car not found"}), 404
-    data = request.get_json()
 
-    # Update each field if present in request
+    data = request.get_json() or {}
+
+    # Map camelCase to snake_case where needed; otherwise setattr
     for key, value in data.items():
         if key == "fuelType":
             car.fuel_type = value
@@ -144,6 +162,7 @@ def update_car(car_id):
 
 @app.route('/cars/<int:car_id>', methods=['DELETE'])
 def delete_car(car_id):
+    """Delete a car listing by ID."""
     car = Car.query.get(car_id)
     if not car:
         return jsonify({"status": "error", "message": "Car not found"}), 404
@@ -151,57 +170,98 @@ def delete_car(car_id):
     db.session.commit()
     return jsonify({"status": "success", "message": f"Car with id {car_id} deleted"}), 200
 
-# ------------------------------
-# User Routes
-# ------------------------------
+@app.route('/cars/pending', methods=['GET'])
+def get_pending_cars():
+    """List all pending (unapproved) cars for admin review."""
+    cars = Car.query.filter_by(approved=False).all()
+    return jsonify({"status": "success", "data": [c.to_dict() for c in cars]}), 200
 
+@app.route('/cars/approved', methods=['GET'])
+def get_approved_cars():
+    """List all approved cars."""
+    cars = Car.query.filter_by(approved=True).all()
+    return jsonify({"status": "success", "data": [c.to_dict() for c in cars]}), 200
+
+@app.route('/cars/<int:car_id>', methods=['GET'])
+def get_car_detail(car_id):
+    """Get details of a single car by ID."""
+    car = Car.query.get(car_id)
+    if not car:
+        return jsonify({"status": "error", "message": "Car not found"}), 404
+    return jsonify({"status": "success", "data": car.to_dict()}), 200
+
+@app.route('/cars/<int:car_id>/approve', methods=['PUT'])
+def approve_car(car_id):
+    """Approve a car listing (admin action)."""
+    car = Car.query.get(car_id)
+    if not car:
+        return jsonify({"status": "error", "message": "Car not found"}), 404
+    car.approved = True
+    db.session.commit()
+    return jsonify({"status": "success", "message": f"Car with id {car_id} approved"}), 200
+
+# --------------------------------------------------------
+# User Routes (Simple demo auth)
+# --------------------------------------------------------
 @app.route('/users', methods=['GET'])
 def get_all_users():
+    """Return all users."""
     users = User.query.all()
     return jsonify({"status": "success", "data": [u.to_dict() for u in users]}), 200
 
 @app.route('/users/<int:user_id>', methods=['GET'])
 def get_user_by_id(user_id):
+    """Get a single user by ID."""
     user = User.query.get(user_id)
-    if user:
-        return jsonify({"status": "success", "data": user.to_dict()}), 200
-    return jsonify({"status": "error", "message": "User not found"}), 404
+    if not user:
+        return jsonify({"status": "error", "message": "User not found"}), 404
+    return jsonify({"status": "success", "data": user.to_dict()}), 200
 
 @app.route('/users', methods=['POST'])
 def create_user():
-    data = request.get_json()
+    """
+    Create a new user (used by admin tools or tests).
+    Requires username + email + password to keep data consistent.
+    """
+    data = request.get_json() or {}
     username = data.get("username")
+    email = data.get("email")
     password = data.get("password")
 
-    if not username or not password:
-        return jsonify({"status": "error", "message": "Username and password are required"}), 400
+    if not username or not email or not password:
+        return jsonify({"status": "error", "message": "Username, email, and password are required"}), 400
 
     if User.query.filter_by(username=username).first():
         return jsonify({"status": "error", "message": "Username already exists"}), 409
+    if User.query.filter_by(email=email).first():
+        return jsonify({"status": "error", "message": "Email already exists"}), 409
 
-    user = User(username=username, password=password)
+    user = User(username=username, email=email, password=password)
     db.session.add(user)
     db.session.commit()
     return jsonify({"status": "success", "data": user.to_dict()}), 201
 
 @app.route('/users/<int:user_id>', methods=['PUT'])
 def update_user(user_id):
+    """Update a user's username/email/password."""
     user = User.query.get(user_id)
     if not user:
         return jsonify({"status": "error", "message": "User not found"}), 404
 
-    data = request.get_json()
+    data = request.get_json() or {}
     if 'username' in data:
         user.username = data['username']
+    if 'email' in data:
+        user.email = data['email']
     if 'password' in data:
         user.password = data['password']
 
     db.session.commit()
     return jsonify({"status": "success", "data": user.to_dict()}), 200
 
-
 @app.route('/users/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
+    """Delete a user by ID."""
     user = User.query.get(user_id)
     if not user:
         return jsonify({"status": "error", "message": "User not found"}), 404
@@ -209,20 +269,24 @@ def delete_user(user_id):
     db.session.commit()
     return jsonify({"status": "success", "message": f"User with id {user_id} deleted"}), 200
 
+# Registration + Login for the front-end demo flow
 @app.route('/api/register', methods=['POST'])
 def api_register():
-    data = request.get_json()
+    """Register a new user (demo). Uses email at registration time."""
+    data = request.get_json() or {}
     username = data.get("username")
-    email = data.get("email")  # Optional in current model
+    email = data.get("email")
     password = data.get("password")
 
-    if not username or not password:
-        return jsonify({"status": "error", "message": "Username and password are required"}), 400
+    if not username or not email or not password:
+        return jsonify({"status": "error", "message": "Username, email, and password are required"}), 400
 
     if User.query.filter_by(username=username).first():
         return jsonify({"status": "error", "message": "Username already exists"}), 409
+    if User.query.filter_by(email=email).first():
+        return jsonify({"status": "error", "message": "Email already exists"}), 409
 
-    user = User(username=username, password=password)
+    user = User(username=username, email=email, password=password)
     db.session.add(user)
     db.session.commit()
 
@@ -232,13 +296,13 @@ def api_register():
         "data": user.to_dict()
     }), 201
 
-
-
-
-# ✅ Add login endpoint (with admin check)
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
+    """
+    Login validates with username + password only,
+    but returns the user's email as well for UI display.
+    """
+    data = request.get_json() or {}
     username = data.get("username")
     password = data.get("password")
 
@@ -250,67 +314,24 @@ def login():
         return jsonify({"status": "error", "message": "Invalid credentials"}), 401
 
     is_admin = (username == "admin")
-
     return jsonify({
         "status": "success",
         "user": {
             "id": user.id,
             "username": user.username,
+            "email": user.email,      # returned for UI display
             "isAdmin": is_admin
         }
     }), 200
 
-
-# ✅ Admin approves a car listing
-@app.route('/cars/<int:car_id>/approve', methods=['PUT'])
-def approve_car(car_id):
-    car = Car.query.get(car_id)
-    if not car:
-        return jsonify({"status": "error", "message": "Car not found"}), 404
-
-    car.approved = True
-    db.session.commit()
-
-    return jsonify({
-        "status": "success",
-        "message": f"Car with id {car_id} approved"
-    }), 200
-
-
-
-# ✅ Get all unapproved car listings (for admin)
-@app.route('/cars/pending', methods=['GET'])
-def get_pending_cars():
-    cars = Car.query.filter_by(approved=False).all()
-    return jsonify({"status": "success", "data": [car.to_dict() for car in cars]}), 200
-
-
-# ✅ Get all approved car listings
-@app.route('/cars/approved', methods=['GET'])
-def get_approved_cars():
-    cars = Car.query.filter_by(approved=True).all()
-    return jsonify({
-        "status": "success",
-        "data": [car.to_dict() for car in cars]
-    }), 200
-
-# ✅ Get car detail by ID
-@app.route('/cars/<int:car_id>', methods=['GET'])
-def get_car_detail(car_id):
-    car = Car.query.get(car_id)
-    if not car:
-        return jsonify({"status": "error", "message": "Car not found"}), 404
-    
-    return jsonify({
-        "status": "success",
-        "data": car.to_dict()
-    }), 200
-
+# --------------------------------------------------------
+# Simple Stats Endpoint (for dashboard)
+# --------------------------------------------------------
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
+    """Basic counts for dashboard tiles."""
     users = User.query.all()
     cars = Car.query.all()
-
     return jsonify({
         "total_users": len(users),
         "admin_users": len([u for u in users if u.username == "admin"]),
@@ -319,15 +340,21 @@ def get_stats():
         "pending_cars": len([c for c in cars if not c.approved])
     }), 200
 
-
-
-# ------------------------------
-# Run the Flask App
-# ------------------------------
+# --------------------------------------------------------
+# Bootstrapping
+# --------------------------------------------------------
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()  # Auto-create tables if not exist
+        # Auto-create tables if they don't exist.
+        # If your existing 'users' table lacks the 'email' column, run this once in PostgreSQL:
+        #   ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(120);
+        #   CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (email);
+        db.create_all()
     app.run(debug=True, port=5000)
+
+
+
+
 
 
 

@@ -3,6 +3,8 @@
 
 import React, { useState } from 'react';
 
+const API_BASE = 'http://127.0.0.1:5000';
+
 const SubmitCar = () => {
   // Car submission form state
   const [carData, setCarData] = useState({
@@ -22,10 +24,8 @@ const SubmitCar = () => {
 
   // Handle input change for all form fields
   const handleChange = (e) => {
-    setCarData({
-      ...carData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setCarData((prev) => ({ ...prev, [name]: value }));
   };
 
   // Submit form data to backend
@@ -39,20 +39,25 @@ const SubmitCar = () => {
       return;
     }
 
-    // Construct submission with user info
-    const newSubmission = {
+    // Construct submission with user info (match backend expectations)
+    const payload = {
       ...carData,
-      submitted_by: currentUser.name,
+      // ensure numeric fields are numbers
+      year: carData.year ? Number(carData.year) : null,
+      price: carData.price ? Number(carData.price) : null,
+      mileage: carData.mileage ? Number(carData.mileage) : null,
+
+      // ✅ send both userId (preferred) and submittedBy (camelCase)
+      userId: currentUser.id,                 // backend will resolve to username
+      submittedBy: currentUser.username,      // fallback if you keep the legacy path
       approved: false,
     };
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/cars', {
+      const response = await fetch(`${API_BASE}/cars`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newSubmission),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -75,7 +80,8 @@ const SubmitCar = () => {
           contactInfo: '',
         });
       } else {
-        alert(`Submission failed: ${result.message}`);
+        console.error('Submission failed:', result);
+        alert(`Submission failed: ${result.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Submission error:', error);
@@ -270,6 +276,7 @@ const SubmitCar = () => {
 };
 
 export default SubmitCar;
+
 
 
 
