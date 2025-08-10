@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 
-const API_BASE = 'http://127.0.0.1:5000';
+const API_BASE = 'https://usedcar-backend-api-hmheetfeduhra2cm.centralus-01.azurewebsites.net';
 
 const SubmitCar = () => {
   // Car submission form state

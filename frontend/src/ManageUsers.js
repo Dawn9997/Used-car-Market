@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import './style.css';
 
-const API_BASE = 'http://127.0.0.1:5000';  // ✅ Use 127.0.0.1 to avoid CORS issues
+const API_BASE = 'https://usedcar-backend-api-hmheetfeduhra2cm.centralus-01.azurewebsites.net';  // ✅ Use 127.0.0.1 to avoid CORS issues
 
 const ManageUsers = () => {
   const [users, setUsers] = useState([]);

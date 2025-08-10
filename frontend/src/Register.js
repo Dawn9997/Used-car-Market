@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 
-const API_BASE = 'http://127.0.0.1:5000/api'; // Flask backend base URL
+const API_BASE = 'https://usedcar-backend-api-hmheetfeduhra2cm.centralus-01.azurewebsites.net/api'; // Flask backend base URL
 
 const Register = () => {
   // Manage form state for username, email, and password

@@ -10,7 +10,7 @@ const Listings = () => {
 
   // Load approved cars from Flask backend on mount
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/cars')  // Adjust if your backend URL is different
+    fetch('https://usedcar-backend-api-hmheetfeduhra2cm.centralus-01.azurewebsites.net/cars')  // Adjust if your backend URL is different
       .then((res) => {
         if (!res.ok) {
           throw new Error('Failed to fetch car listings.');

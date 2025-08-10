@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE = 'http://127.0.0.1:5000'; // Backend API base URL
+const API_BASE = 'https://usedcar-backend-api-hmheetfeduhra2cm.centralus-01.azurewebsites.net'; // Backend API base URL
 
 const Login = () => {
   const [username, setUsername] = useState('');

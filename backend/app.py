@@ -10,7 +10,10 @@ app = Flask(__name__)
 CORS(app)
 
 # PostgreSQL connection (adjust if needed)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:zhanghan998@localhost:5433/postgres'
+app.config['SQLALCHEMY_DATABASE_URI'] = (
+    'postgresql://hanadmin:Ferrari1234@capstonenu-usedcars.postgres.database.azure.com:5432/usedcars'
+)
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)

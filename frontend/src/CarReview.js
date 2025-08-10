@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './style.css';
 
-const API_BASE = 'http://127.0.0.1:5000'; // Flask backend root URL
+const API_BASE = 'https://usedcar-backend-api-hmheetfeduhra2cm.centralus-01.azurewebsites.net'; // Flask backend root URL
 
 const CarReview = () => {
   const [pending, setPending] = useState([]);
